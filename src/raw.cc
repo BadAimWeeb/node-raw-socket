@@ -445,7 +445,14 @@ void SocketWrap::HandleIOEvent (int status, int revents) {
 		 ** 0.10 and 0.12.  So, for now, we will just give you the number.
 		 **/
 		char status_str[32];
+#ifdef __APPLE__
+		/** 
+		 * OSX deprecates the use of sprintf
+	     */
+		snprintf(status_str, sizeof(status_str), "%d", status);
+#else
 		sprintf(status_str, "%d", status);
+#endif
 		Napi::Error error = Napi::Error::New(env, status_str);
 		args[1] = error.Value();
 
@@ -567,7 +574,8 @@ Napi::Value SocketWrap::Recv(const Napi::CallbackInfo& info) {
 	socklen_t sin_length = socket->family_ == AF_INET6
 			? sizeof (sin6_address)
 			: sizeof (sin_address);
-#endif
+#endif
+
 	
 	if (info.Length () < 2) {
 		Napi::Error::New(env, "Five arguments are required").ThrowAsJavaScriptException();
@@ -618,6 +626,24 @@ Napi::Value SocketWrap::Recv(const Napi::CallbackInfo& info) {
 		uv_ip6_name (&sin6_address, addr, 50);
 	else
 		uv_ip4_name (&sin_address, addr, 50);
+
+#ifdef __APPLE__
+	/*
+	FreeBSD has a bug/feature(?) such that:
+	- ip_len does not include the IP header's length.  recvfrom() however
+	  returns the packet's true length.  To get the true ip_len field do:
+	  iphdr->ip_len += iphdr->ip_hl << 2;	
+	  This code converts this information 
+	*/
+	if (socket->family_ != AF_INET6) {
+		char *message = (char *)node::Buffer::Data(buffer);
+		int header_len = (message[0] & 0x0F) << 2;
+		long packet_len = message[3] << 8 | message[2] + header_len;
+
+		message[3] = packet_len & 0xFF;
+		message[2] = (packet_len >> 8) & 0xFF;
+	}
+#endif
 	
 	Napi::Function cb = info[1].As<Napi::Function>();
 	const unsigned argc = 3;
