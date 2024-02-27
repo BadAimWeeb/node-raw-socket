@@ -8,7 +8,7 @@
     "example": "example"
   },
   "dependencies": {
-    "node-addon-api": "4.0.0"
+    "node-addon-api": "7.1.0"
   },
   "contributors": [
     {
